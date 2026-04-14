@@ -3,9 +3,21 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from django.views.decorators.csrf import csrf_exempt
 
-from .models import SystemSettings, PowerDevice
-from .serializers import SystemSettingsSerializer, PowerDeviceSerializer
+from .models import SystemSettings
+from .serializers import SystemSettingsSerializer
+from apps.devices.models import Device
 from apps.alerts.utils import create_alert
+
+
+# Map device icons to power groups
+def _device_group(device):
+    sensors = {'faEye', 'faWater', 'faTemperatureHalf'}
+    boards  = {'faToggleOn', 'faServer', 'faDisplay', 'faMicrochip'}
+    if device.icon in sensors:
+        return 'sensors'
+    if device.icon in boards:
+        return 'boards'
+    return 'devices'
 
 
 @csrf_exempt
@@ -56,30 +68,43 @@ def system_power_view(request):
 @csrf_exempt
 @api_view(['GET'])
 def power_devices_list(request):
-    qs = PowerDevice.objects.all()
-    return Response(PowerDeviceSerializer(qs, many=True).data)
+    devices = Device.objects.all()
+    return Response([
+        {
+            'id':     d.id,
+            'name':   d.name,
+            'group':  _device_group(d),
+            'status': d.status == 'Online',
+            'location': d.location,
+        }
+        for d in devices
+    ])
 
 
 @csrf_exempt
 @api_view(['PATCH'])
 def power_device_toggle(request, pk):
     try:
-        device = PowerDevice.objects.get(pk=pk)
-    except PowerDevice.DoesNotExist:
+        device = Device.objects.get(pk=pk)
+    except Device.DoesNotExist:
         return Response({'error': 'Not found.'}, status=status.HTTP_404_NOT_FOUND)
 
+    new_status = request.data.get('status')
+    if new_status is None:
+        return Response({'error': 'status required.'}, status=status.HTTP_400_BAD_REQUEST)
+
     old_status = device.status
-    device.status = request.data.get('status', device.status)
-    device.save()
+    device.status = 'Online' if new_status else 'Offline'
+    device.save(update_fields=['status'])
 
     if device.status != old_status:
-        if device.status:
+        if new_status:
             create_alert(
                 title    = 'Device Powered On',
                 device   = device.name,
                 message  = f'{device.name} was powered on from the Settings panel.',
                 severity = 'Low',
-                location = 'Settings',
+                location = device.location,
                 status   = 'resolved',
             )
         else:
@@ -88,7 +113,7 @@ def power_device_toggle(request, pk):
                 device   = device.name,
                 message  = f'{device.name} was powered off from the Settings panel.',
                 severity = 'Medium',
-                location = 'Settings',
+                location = device.location,
             )
 
-    return Response(PowerDeviceSerializer(device).data)
+    return Response({'id': device.id, 'name': device.name, 'group': _device_group(device), 'status': device.status == 'Online'})
