@@ -1,46 +1,135 @@
+from datetime import date, timedelta
 from django.utils import timezone
-from rest_framework import generics
+from django.db.models import Avg, Sum
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
-from .models import KPI, Sensor, Device, Alert
-from .serializers import KPISerializer, SensorSerializer, DeviceSerializer, AlertSerializer
-
-
-class KPIList(generics.ListAPIView):
-    queryset = KPI.objects.all()
-    serializer_class = KPISerializer
-
-
-class SensorList(generics.ListAPIView):
-    queryset = Sensor.objects.all()
-    serializer_class = SensorSerializer
-
-
-class DeviceList(generics.ListAPIView):
-    queryset = Device.objects.all()
-    serializer_class = DeviceSerializer
-
-
-class AlertList(generics.ListAPIView):
-    queryset = Alert.objects.order_by('-time')
-    serializer_class = AlertSerializer
-
-
-@api_view(['GET'])
-def activity_waveform(request):
-    hours = ['6am','7am','8am','9am','10am','11am','12pm','1pm','2pm','3pm','4pm','5pm']
-    values = [12, 28, 45, 62, 80, 95, 88, 74, 60, 48, 35, 20]
-    return Response({'hours': hours, 'values': values})
+from apps.devices.models import Device, DeviceSensorReading
+from apps.alerts.models import Alert
+from apps.analytics.models import SensorReading
 
 
 @api_view(['GET'])
 def dashboard_summary(request):
-    active_alerts = Alert.objects.filter(severity='High', is_read=False).count()
+    active_alerts = Alert.objects.filter(severity='High', dismissed=False).count()
+    total = Device.objects.count()
+    online = Device.objects.filter(status='Online').count()
+    status = 'System Operational' if online == total else f'{online}/{total} Devices Online'
     return Response({
         'readable_date': timezone.localtime().strftime('%A, %B %d, %Y'),
         'station': 'Main Entrance Station',
-        'status': 'System Operational',
+        'status': status,
         'active_alerts': active_alerts,
     })
+
+
+@api_view(['GET'])
+def kpi_list(request):
+    today = date.today()
+    yesterday = today - timedelta(days=1)
+
+    def reading(d):
+        return SensorReading.objects.filter(date=d).aggregate(
+            soap=Sum('soap_usage'), water=Sum('water_usage'),
+            washed=Sum('handwashes'), unwashed=Sum('unwashed'),
+        )
+
+    t = reading(today)
+    y = reading(yesterday)
+
+    def pct_change(now, prev):
+        if not prev:
+            return '+0%'
+        diff = ((now or 0) - (prev or 0)) / (prev or 1) * 100
+        return f"{'+' if diff >= 0 else ''}{diff:.0f}%"
+
+    # Average soap/water level from latest device readings
+    latest = DeviceSensorReading.objects.order_by('device', '-timestamp').distinct('device')
+    avg_soap  = latest.aggregate(v=Avg('soap_level'))['v'] or 0
+    avg_water = latest.aggregate(v=Avg('water_level'))['v'] or 0
+
+    handwashes = t['washed'] or 0
+    unwashed   = t['unwashed'] or 0
+    water_used = t['water'] or 0
+
+    return Response([
+        {'label': 'Handwashes Today', 'value': str(handwashes),        'change': pct_change(handwashes, y['washed']),  'up': handwashes >= (y['washed'] or 0),  'color': '#10b981'},
+        {'label': 'Soap Remaining',   'value': f"{avg_soap:.0f}%",     'change': '-',                                  'up': avg_soap > 30,                     'color': '#6366f1'},
+        {'label': 'Water Used (L)',   'value': f"{water_used:.0f}",    'change': pct_change(water_used, y['water']),   'up': True,                              'color': '#0ea5e9'},
+        {'label': 'Left Unwashed',    'value': str(unwashed),           'change': pct_change(unwashed, y['unwashed']),  'up': unwashed <= (y['unwashed'] or 0),  'color': '#ef4444'},
+    ])
+
+
+@api_view(['GET'])
+def sensor_list(request):
+    latest = (
+        DeviceSensorReading.objects
+        .order_by('device', '-timestamp')
+        .distinct('device')
+    )
+    avg_water = latest.aggregate(v=Avg('water_level'))['v'] or 0
+    avg_soap  = latest.aggregate(v=Avg('soap_level'))['v'] or 0
+    avg_temp  = latest.aggregate(v=Avg('temperature'))['v'] or 0
+    handwashes = SensorReading.objects.filter(date=date.today()).aggregate(v=Sum('handwashes'))['v'] or 0
+    max_washes = 500
+
+    return Response([
+        {'label': 'Water Level',     'value': f"{avg_water:.0f}%",  'pct': int(avg_water),              'color': '#0ea5e9'},
+        {'label': 'Soap Level',      'value': f"{avg_soap:.0f}%",   'pct': int(avg_soap),               'color': '#6366f1'},
+        {'label': 'Temperature',     'value': f"{avg_temp:.1f}\u00b0C", 'pct': int(avg_temp / 50 * 100), 'color': '#f59e0b'},
+        {'label': 'Handwash Count',  'value': str(handwashes),      'pct': min(int(handwashes / max_washes * 100), 100), 'color': '#10b981'},
+    ])
+
+
+@api_view(['GET'])
+def device_list(request):
+    devices = Device.objects.all()[:6]
+    return Response([
+        {
+            'id':      d.id,
+            'name':    d.name,
+            'status':  d.status,
+            'battery': d.battery,
+            'color':   d.color,
+            'location': d.location,
+            'icon':    d.icon,
+        }
+        for d in devices
+    ])
+
+
+@api_view(['GET'])
+def alert_list(request):
+    alerts = Alert.objects.filter(dismissed=False).order_by('-time')[:4]
+    return Response([
+        {
+            'id':       a.id,
+            'title':    a.title,
+            'device':   a.device,
+            'time':     a.time.strftime('%I:%M %p'),
+            'severity': a.severity,
+        }
+        for a in alerts
+    ])
+
+
+@api_view(['GET'])
+def activity_waveform(request):
+    now   = timezone.localtime()
+    today = now.date()
+    readings = (
+        DeviceSensorReading.objects
+        .filter(timestamp__date=today)
+        .values_list('timestamp', flat=True)
+    )
+    # bucket into hours 0-23
+    buckets = [0] * 24
+    for ts in readings:
+        buckets[timezone.localtime(ts).hour] += 1
+
+    # return only hours that have passed so far
+    current_hour = now.hour
+    hours  = [f"{h % 12 or 12}{'am' if h < 12 else 'pm'}" for h in range(current_hour + 1)]
+    values = buckets[:current_hour + 1]
+    return Response({'hours': hours, 'values': values})
 
