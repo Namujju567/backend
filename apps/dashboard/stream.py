@@ -49,7 +49,7 @@ def _collect():
     kpi = [
         {'label': 'Handwashes Today', 'value': str(handwashes),     'change': pct(handwashes, y['washed']),  'up': handwashes >= (y['washed'] or 0),  'color': '#10b981'},
         {'label': 'Soap Remaining',   'value': f"{avg_soap:.0f}%",  'change': '-',                           'up': avg_soap > 30,                     'color': '#6366f1'},
-        {'label': 'Water Used (L)',   'value': f"{water_used:.0f}", 'change': pct(water_used, y['water']),   'up': True,                              'color': '#0ea5e9'},
+        {'label': 'Water Used (mL)',   'value': f"{water_used:.0f}", 'change': pct(water_used, y['water']),   'up': True,                              'color': '#0ea5e9'},
         {'label': 'Left Unwashed',    'value': str(unwashed),        'change': pct(unwashed, y['unwashed']),  'up': unwashed <= (y['unwashed'] or 0),  'color': '#ef4444'},
     ]
 

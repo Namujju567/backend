@@ -1,6 +1,6 @@
 from datetime import datetime, date, time, timedelta
 from django.db.models import Sum, Q, DateTimeField
-from django.db.models.functions import Cast, Coalesce, TruncDay, TruncHour, TruncMonth
+from django.db.models.functions import Cast, Coalesce, TruncDay, TruncHour, TruncMinute, TruncMonth
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
@@ -27,7 +27,20 @@ def _coalesced_timestamp(qs):
 def _aggregate(qs, resolution='day'):
     """Aggregate sensor values for the requested time bucket."""
     qs = _coalesced_timestamp(qs)
-    if resolution == 'hour':
+    if resolution == 'minute':
+        rows = (
+            qs.annotate(period=TruncMinute('ts'))
+              .values('period')
+              .annotate(
+                  soap_usage=Sum('soap_usage'),
+                  water_usage=Sum('water_usage'),
+                  handwashes=Sum('handwashes'),
+                  unwashed=Sum('unwashed'),
+              )
+              .order_by('period')
+        )
+        labels = [r['period'].strftime('%H:%M') for r in rows]
+    elif resolution == 'hour':
         rows = (
             qs.annotate(period=TruncHour('ts'))
               .values('period')
@@ -88,13 +101,18 @@ def _resolve_resolution(qs, from_dt, to_dt, requested='auto'):
         return 'day'
     if requested == 'hourly':
         return 'hour'
+    if requested == 'minute':
+        return 'minute'
     if requested == 'month':
         return 'month'
     if requested != 'auto':
         return 'day'
 
-    if qs.filter(timestamp__isnull=False).exists() and (to_dt - from_dt) <= timedelta(days=2):
-        return 'hour'
+    if qs.filter(timestamp__isnull=False).exists():
+        if (to_dt - from_dt) <= timedelta(hours=1):
+            return 'minute'
+        if (to_dt - from_dt) <= timedelta(days=2):
+            return 'hour'
     return 'day'
 
 
@@ -121,12 +139,12 @@ def _build_range_response(from_dt, to_dt, resolution='auto'):
 @permission_classes([])
 def analytics_auto(request):
     now = timezone.now()
-    start = now - timedelta(hours=3)
+    start = now - timedelta(minutes=1)
     recent_qs = SensorReading.objects.filter(timestamp__range=(start, now))
     if recent_qs.exists():
-        response = _aggregate(recent_qs, 'hour')
-        response['resolution'] = 'hour'
-        response['range'] = 'Last 3 hours'
+        response = _aggregate(recent_qs, 'minute')
+        response['resolution'] = 'minute'
+        response['range'] = 'Last 1 minute'
         return Response(response)
 
     today = timezone.localdate()
@@ -193,8 +211,8 @@ def iot_ingest(request):
     {
         "date": "2025-07-20",
         "device": "IoT-Station-01",
-        "soap_usage": 1.8,
-        "water_usage": 145.0,
+        "soap_usage": 1800.0,
+        "water_usage": 145000.0,
         "handwashes": 62,
         "unwashed": 8
     }
@@ -235,18 +253,18 @@ def iot_ingest(request):
         water = serializer.validated_data['water_usage']
         unwashed = serializer.validated_data['unwashed']
 
-        if soap < 0.3:
+        if soap < 300:
             create_alert(
                 title    = 'Critical Soap Supply',
                 device   = device_name,
-                message  = f'Daily soap usage dropped to {soap}L — dispenser may be empty.',
+                message  = f'Daily soap usage dropped to {soap} mL — dispenser may be empty.',
                 severity = 'High',
             )
-        if water < 10:
+        if water < 10000:
             create_alert(
                 title    = 'Low Water Usage Detected',
                 device   = device_name,
-                message  = f'Water usage is only {water}L today — possible supply issue.',
+                message  = f'Water usage is only {water} mL today — possible supply issue.',
                 severity = 'Medium',
             )
         if unwashed > 50:

@@ -5,8 +5,8 @@ class SensorReading(models.Model):
     date = models.DateField()
     timestamp = models.DateTimeField(null=True, blank=True)
     device = models.CharField(max_length=128, default='IoT-Station-01')
-    soap_usage = models.FloatField(default=0.0)    # litres
-    water_usage = models.FloatField(default=0.0)   # litres
+    soap_usage = models.FloatField(default=0.0)    # millilitres
+    water_usage = models.FloatField(default=0.0)   # millilitres
     handwashes = models.PositiveIntegerField(default=0)
     unwashed = models.PositiveIntegerField(default=0)
 
