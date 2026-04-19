@@ -22,7 +22,7 @@ class Command(BaseCommand):
             self.stdout.write("bootstrap_admin: real superadmin found — skipping.")
             return
 
-        # Create the temp superadmin if not present
+        # Create the temp superadmin if not present, always reset password
         if not User.objects.filter(username=TEMP_USERNAME).exists():
             User.objects.create_superuser(
                 username=TEMP_USERNAME,
@@ -37,9 +37,10 @@ class Command(BaseCommand):
             u.is_active = True
             u.is_staff = True
             u.is_superuser = True
+            u.set_password(TEMP_PASSWORD)  # always reset so login works
             u.save()
             self.stdout.write(self.style.WARNING(
-                f"Superadmin '{TEMP_USERNAME}' already exists — ensured active."
+                f"Superadmin '{TEMP_USERNAME}' already exists — password reset, ensured active."
             ))
 
         # Disable every other user so only the temp account can log in
