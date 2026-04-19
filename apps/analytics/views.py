@@ -141,21 +141,73 @@ def analytics_auto(request):
     now = timezone.now()
     start = now - timedelta(minutes=3)
     recent_qs = SensorReading.objects.filter(timestamp__range=(start, now))
-    if recent_qs.exists():
-        response = _aggregate(recent_qs, 'minute')
-        response['resolution'] = 'minute'
-        response['range'] = 'Last 3 minutes'
-        return Response(response)
 
-    today = timezone.localdate()
-    start_date = today - timedelta(days=6)
-    qs = SensorReading.objects.filter(
-        Q(timestamp__range=(datetime.combine(start_date, time.min), now)) |
-        Q(timestamp__isnull=True, date__range=(start_date, today))
-    )
-    response = _aggregate(qs, 'day')
-    response['resolution'] = 'day'
-    response['range'] = 'Last 7 days'
+    # Generate data for each of the last 3 minutes, even if no data
+    minutes_data = []
+    current_minute = start.replace(second=0, microsecond=0)
+    end_minute = now.replace(second=0, microsecond=0)
+
+    while current_minute <= end_minute:
+        min_start = current_minute
+        min_end = current_minute + timedelta(minutes=1)
+        qs_min = recent_qs.filter(timestamp__range=(min_start, min_end))
+
+        soap = qs_min.aggregate(s=Sum('soap_usage'))['s'] or 0
+        water = qs_min.aggregate(w=Sum('water_usage'))['w'] or 0
+        handwashes = qs_min.aggregate(h=Sum('handwashes'))['h'] or 0
+        unwashed = qs_min.aggregate(u=Sum('unwashed'))['u'] or 0
+
+        minutes_data.append({
+            'period': current_minute,
+            'soap_usage': soap,
+            'water_usage': water,
+            'handwashes': handwashes,
+            'unwashed': unwashed,
+        })
+        current_minute += timedelta(minutes=1)
+
+    # Build response
+    labels = [m['period'].strftime('%H:%M') for m in minutes_data]
+    soap_usage = [round(m['soap_usage'], 2) for m in minutes_data]
+    water_usage = [round(m['water_usage'], 2) for m in minutes_data]
+    handwashes = [m['handwashes'] for m in minutes_data]
+    unwashed = [m['unwashed'] for m in minutes_data]
+
+    response = {
+        'labels': labels,
+        'soapUsage': soap_usage,
+        'waterUsage': water_usage,
+        'handwashes': handwashes,
+        'unwashed': unwashed,
+        'resolution': 'minute',
+        'range': 'Last 3 minutes',
+    }=Sum('unwashed'))['u'] or 0
+
+        minutes_data.append({
+            'period': current_minute,
+            'soap_usage': soap,
+            'water_usage': water,
+            'handwashes': handwashes,
+            'unwashed': unwashed,
+        })
+        current_minute += timedelta(minutes=1)
+
+    # Build response
+    labels = [m['period'].strftime('%H:%M') for m in minutes_data]
+    soap_usage = [round(m['soap_usage'], 2) for m in minutes_data]
+    water_usage = [round(m['water_usage'], 2) for m in minutes_data]
+    handwashes = [m['handwashes'] for m in minutes_data]
+    unwashed = [m['unwashed'] for m in minutes_data]
+
+    response = {
+        'labels': labels,
+        'soapUsage': soap_usage,
+        'waterUsage': water_usage,
+        'handwashes': handwashes,
+        'unwashed': unwashed,
+        'resolution': 'minute',
+        'range': 'Last 3 minutes',
+    }
     return Response(response)
 
 
