@@ -38,6 +38,9 @@ def iot_ingest(request, device_id):
     if not SystemSettings.get().system_online:
       new_status = 'Offline'
 
+    # Get previous reading for threshold-crossing checks
+    prev = device.readings.first()
+
     DeviceSensorReading.objects.create(
         device      = device,
         water_level = water_level,
@@ -87,35 +90,38 @@ def iot_ingest(request, device_id):
             )
         device.battery = battery
 
-    # ── Alert: low soap level ──
+    # ── Alert: low soap level (only on threshold crossing) ──
     if soap_level is not None and soap_level < 20:
-        create_alert(
-            title    = 'Low Soap Level',
-            device   = device.name,
-            message  = f'Soap level on {device.name} is critically low at {soap_level}%.',
-            severity = 'High',
-            location = device.location,
-        )
+        if prev is None or prev.soap_level is None or prev.soap_level >= 20:
+            create_alert(
+                title    = 'Low Soap Level',
+                device   = device.name,
+                message  = f'Soap level on {device.name} is critically low at {soap_level}%.',
+                severity = 'High',
+                location = device.location,
+            )
 
-    # ── Alert: low water level ──
+    # ── Alert: low water level (only on threshold crossing) ──
     if water_level is not None and water_level < 15:
-        create_alert(
-            title    = 'Water Tank Empty',
-            device   = device.name,
-            message  = f'Water level on {device.name} is critically low at {water_level}%.',
-            severity = 'High',
-            location = device.location,
-        )
+        if prev is None or prev.water_level is None or prev.water_level >= 15:
+            create_alert(
+                title    = 'Water Tank Empty',
+                device   = device.name,
+                message  = f'Water level on {device.name} is critically low at {water_level}%.',
+                severity = 'High',
+                location = device.location,
+            )
 
-    # ── Alert: high temperature ──
+    # ── Alert: high temperature (only on threshold crossing) ──
     if temperature is not None and temperature > 40:
-        create_alert(
-            title    = 'High Temperature Detected',
-            device   = device.name,
-            message  = f'Temperature sensor on {device.name} reads {temperature}°C.',
-            severity = 'Medium',
-            location = device.location,
-        )
+        if prev is None or prev.temperature is None or prev.temperature <= 40:
+            create_alert(
+                title    = 'High Temperature Detected',
+                device   = device.name,
+                message  = f'Temperature sensor on {device.name} reads {temperature}°C.',
+                severity = 'Medium',
+                location = device.location,
+            )
 
     device.save()
     return Response({'ok': True}, status=status.HTTP_201_CREATED)
