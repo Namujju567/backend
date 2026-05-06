@@ -48,6 +48,14 @@ def mark_all_read(request):
     return Response({'ok': True})
 
 
+@api_view(['DELETE'])
+@authentication_classes([])
+@permission_classes([])
+def clear_all(request):
+    Alert.objects.all().delete()
+    return Response({'ok': True})
+
+
 @api_view(['GET'])
 @authentication_classes([])
 @permission_classes([])

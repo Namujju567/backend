@@ -6,5 +6,6 @@ urlpatterns = [
     path('<int:pk>/',       views.AlertDetail.as_view(), name='alert-detail'),
     path('<int:pk>/read/',  views.mark_read,            name='alert-read'),
     path('read-all/',       views.mark_all_read,        name='alert-read-all'),
+    path('clear-all/',      views.clear_all,            name='alert-clear-all'),
     path('counts/',         views.alert_counts,         name='alert-counts'),
 ]
