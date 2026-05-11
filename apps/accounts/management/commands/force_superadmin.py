@@ -12,17 +12,21 @@ class Command(BaseCommand):
         email    = "ssematasabira24@gmail.com"
         password = "sabira@25"
 
-        user, created = User.objects.get_or_create(username=username)
-        user.email      = email
-        user.first_name = "SSEMATA"
-        user.last_name  = "SABIRA"
-        user.is_active  = True
-        user.is_staff   = True
-        user.is_superuser = True
-        user.set_password(password)
+        # Delete any existing user with same username (any case) or email to avoid conflicts
+        User.objects.filter(username__iexact=username).delete()
+        User.objects.filter(email=email).delete()
+
+        user = User.objects.create_superuser(
+            username=username,
+            email=email,
+            password=password,
+            first_name="SSEMATA",
+            last_name="SABIRA",
+        )
+        user.is_active = True
         user.save()
 
-        action = "created" if created else "reset"
         self.stdout.write(self.style.SUCCESS(
-            f"Superadmin '{username}' {action}. Login with password: {password}"
+            f"SUCCESS: Superadmin '{username}' created fresh."
+            f" Email: {email} | Password: {password}"
         ))
