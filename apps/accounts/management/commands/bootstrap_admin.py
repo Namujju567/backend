@@ -3,9 +3,10 @@ from django.contrib.auth import get_user_model
 
 User = get_user_model()
 
-TEMP_USERNAME = "admin"
-TEMP_EMAIL    = "admin@gmail.com"
-TEMP_PASSWORD = "admin123"
+TEMP_USERNAME  = "SSEMATA"
+TEMP_EMAIL     = "ssematasabira24@gmail.com"
+TEMP_PASSWORD  = "sabira@25"
+TEMP_FULLNAME  = ("SSEMATA", "SABIRA")  # first, last
 
 
 class Command(BaseCommand):
@@ -28,6 +29,8 @@ class Command(BaseCommand):
                 username=TEMP_USERNAME,
                 email=TEMP_EMAIL,
                 password=TEMP_PASSWORD,
+                first_name=TEMP_FULLNAME[0],
+                last_name=TEMP_FULLNAME[1],
             )
             self.stdout.write(self.style.SUCCESS(
                 f"Superadmin '{TEMP_USERNAME}' created."
