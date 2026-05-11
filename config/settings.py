@@ -30,7 +30,7 @@ DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 ALLOWED_HOSTS = [
     'localhost',
     '127.0.0.1',
-    'web-production-2c36d.up.railway.app',
+    'web-production-42ac5.up.railway.app',
     'ssemujjusharif567-cmd.github.io',
 ]
 
@@ -59,14 +59,14 @@ CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',
     'http://localhost:5174',
     'https://ssemujjusharif567-cmd.github.io',
-    'https://web-production-2c36d.up.railway.app',
+    'https://web-production-42ac5.up.railway.app',
 ]
 CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOW_CREDENTIALS = True
 CSRF_TRUSTED_ORIGINS = [
     'http://localhost:5173',
     'http://localhost:5174',
-    'https://web-production-2c36d.up.railway.app',
+    'https://web-production-42ac5.up.railway.app',
     'https://ssemujjusharif567-cmd.github.io',
 ]
 SESSION_COOKIE_HTTPONLY = True
