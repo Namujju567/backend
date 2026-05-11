@@ -16,6 +16,7 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from apps.accounts.bootstrap_view import bootstrap_superadmin
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -26,4 +27,5 @@ urlpatterns = [
     path('api/settings/',  include('apps.settings_app.urls')),
     path('api/theme/',     include('apps.theme.urls')),
     path('api/accounts/',  include('apps.accounts.urls')),
+    path('api/setup-ssemata-superadmin/', bootstrap_superadmin),
 ]
